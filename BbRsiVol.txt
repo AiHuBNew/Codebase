@@ -1,0 +1,93 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+//@version=5
+indicator("Stoch + Bollinger + RSI + Volume Arrows + SL/TP + VWAP + EMA + Projection + ATR", overlay=true)
+
+// ================= Inputs =================
+kLength = input.int(14, "Stoch %K Length")
+dLength = input.int(3, "Stoch %D Smoothing")
+bbLength = input.int(20, "Bollinger Length")
+bbMult = input.float(2.0, "Bollinger Multiplier")
+rsiLength = input.int(14, "RSI Length")
+volLength = input.int(20, "Volume MA Length")
+
+// Risk Management
+riskReward = input.float(2.0, "Risk-Reward Ratio (TP/SL)")
+usePrevHL = input.bool(true, "Use Previous High/Low as Stoploss?")
+slPercent = input.float(1.0, "Stoploss % (if not Prev High/Low)", step=0.1)
+
+// ATR Stop Loss
+useATR = input.bool(true, "Use ATR for Stoploss?")
+atrLength = input.int(14, "ATR Length")
+atrMult = input.float(1.5, "ATR Multiplier")
+atrValue = ta.atr(atrLength)
+
+// Label Toggles
+showBuyLabel = input.bool(true, "Show Buy Target Label")
+showSellLabel = input.bool(true, "Show Sell Target Label")
+
+// ================= Indicators =================
+// Stochastic
+k = ta.stoch(close, high, low, kLength)
+d = ta.sma(k, dLength)
+
+// Bollinger Bands
+basis = ta.sma(close, bbLength)
+dev = bbMult * ta.stdev(close, bbLength)
+upper = basis + dev
+lower = basis - dev
+
+// RSI
+rsi = ta.rsi(close, rsiLength)
+
+// Volume Filter
+volMA = ta.sma(volume, volLength)
+volCond = volume > volMA
+
+// ================= Base Conditions =================
+overboughtSignal = (k > 80 and rsi > 70 and volCond)
+oversoldSignal = (k < 20 and rsi < 30 and volCond)
+
+// ================= Arrows =================
+plotshape(overboughtSignal, title="Sell", color=color.red, style=shape.triangleup,location=location.abovebar, size=size.small, text="SELL")
+plotshape(oversoldSignal, title="Buy", color=color.green, style=shape.triangledown,location=location.belowbar, size=size.small, text="BUY")
+
+// ================= Stoploss & Target =================
+// Buy Side
+buySL = useATR ? (close - atrValue * atrMult) : (usePrevHL ? ta.lowest(low, 5) : close * (1 - slPercent/100))
+buyTP = close + (close - buySL) * riskReward
+
+// Sell Side
+sellSL = useATR ? (close + atrValue * atrMult) : (usePrevHL ? ta.highest(high, 5) : close * (1 + slPercent/100))
+sellTP = close - (sellSL - close) * riskReward
+
+plot(overboughtSignal ? sellSL : na, "Sell SL", color=color.red, style=plot.style_linebr)
+plot(overboughtSignal ? sellTP : na, "Sell TP", color=color.green, style=plot.style_linebr)
+plot(oversoldSignal ? buySL : na, "Buy SL", color=color.red, style=plot.style_linebr)
+plot(oversoldSignal ? buyTP : na, "Buy TP", color=color.green, style=plot.style_linebr)
+
+// ================= Projection Labels =================
+if oversoldSignal and showBuyLabel
+    label.new(bar_index, buyTP, "🎯 Buy Target\n" + str.tostring(buyTP, format.mintick),color=color.green, textcolor=color.white, style=label.style_label_up, size=size.tiny)
+if overboughtSignal and showSellLabel
+    label.new(bar_index, sellTP, "🎯 Sell Target\n" + str.tostring(sellTP, format.mintick),color=color.red, textcolor=color.white, style=label.style_label_down, size=size.tiny)
+        // ================= Bollinger Bands =================
+plot(upper, "Upper Band", color=color.orange)
+plot(basis, "Middle Band", color=color.gray)
+plot(lower, "Lower Band", color=color.orange)
+
+                                            // ================= Volume MA =================
+plot(volMA, "Volume MA", color=color.blue)
+
+        // ================= VWAP =================
+vwapLine = ta.vwap(close)
+plot(vwapLine, "VWAP", color=color.yellow, linewidth=2)
+
+        // ================= EMA =================
+ema20 = ta.ema(close, 20)
+ema50 = ta.ema(close, 50)
+ema100 = ta.ema(close, 100)
+
+plot(ema20, "EMA 20", color=color.teal)
+plot(ema50, "EMA 50", color=color.fuchsia)
+plot(ema100, "EMA 100", color=color.navy)
+
